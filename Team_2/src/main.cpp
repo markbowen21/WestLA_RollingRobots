@@ -16,15 +16,17 @@ using namespace vex;
 competition Competition;
 brain Brain;
 controller Controller1 = controller(primary);
-motor LeftMotor1 = motor(PORT3, ratio18_1, false);
-motor LeftMotor2 = motor(PORT4, ratio18_1, false);
-motor LeftMotor3 = motor(PORT5, ratio18_1, false);
-motor RightMotor1 = motor(PORT6, ratio18_1, true);
-motor RightMotor2 = motor(PORT7, ratio18_1, true);
-motor RightMotor3 = motor(PORT8, ratio18_1, true);
-pneumatics Pneumatics = pneumatics(Brain.ThreeWirePort.A);
-motor Intake = motor(PORT17, ratio18_1, false);
-motor Lift = motor(PORT18, ratio6_1, false);
+
+//Pretty sure this the correct motor setup
+motor LeftMotor1 = motor(PORT11, ratio6_1, true);
+motor LeftMotor2 = motor(PORT4, ratio6_1, false);
+motor LeftMotor3 = motor(PORT5, ratio6_1, true);
+motor RightMotor1 = motor(PORT6, ratio6_1, false);
+motor RightMotor2 = motor(PORT7, ratio6_1, true);
+motor RightMotor3 = motor(PORT8, ratio6_1, false);
+pneumatics Pneumatics = pneumatics(Brain.ThreeWirePort.G);
+motor Intake = motor(PORT17, ratio36_1, false);
+motor Lift = motor(PORT18, ratio18_1, false);
 
 // define your global instances of motors and other devices here
 
@@ -67,6 +69,10 @@ void clamp_close() {
   Pneumatics.set(true);
 }
 
+void inchDrive(distanceInInches) {
+
+}
+
 void pre_auton(void) {
 
   // All activities that occur before the competition starts
@@ -87,11 +93,19 @@ void autonomous(void) {
   // ..........................................................................
   // Insert autonomous user code here.
   // ..........................................................................
-    double wheelDiameterInches = 4.0;
+  /*double wheelDiameterInches = 4.0;
   double wheelCircumferenceInches = wheelDiameterInches * M_PI;
   double distanceInFeet = 2.0;
   double distanceInInches = distanceInFeet * 12.0;
+  double rotations = distanceInInches / wheelCircumferenceInches;*/
+
+  double wheelDiameterInches = 3.25;
+  double wheelCircumferenceInches = wheelDiameterInches * M_PI;
+  double distanceInFeet = 2.0;
   double rotations = distanceInInches / wheelCircumferenceInches;
+  double distanceInInches = rotations * wheelCircumferenceInches;
+  
+
 
   // Adjust for the gear ratio
   double adjustedRotations = rotations * (4.0 / 3.0);
