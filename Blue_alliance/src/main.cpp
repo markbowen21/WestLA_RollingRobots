@@ -1,14 +1,13 @@
 /*----------------------------------------------------------------------------*/
 /*                                                                            */
 /*    Module:       main.cpp                                                  */
-/*    Author:       markb                                                     */
-/*    Created:      3/1/2025, 6:37:18 PM                                      */
+/*    Author:       Mark Bowen                                                */
+/*    Created:      3/14/2025, 1:09:25 AM                                     */
 /*    Description:  V5 project                                                */
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
 #include "vex.h"
-#include "math.h"
 
 using namespace vex;
 
@@ -16,57 +15,72 @@ using namespace vex;
 competition Competition;
 brain Brain;
 controller Controller1 = controller(primary);
+// define your global instances of motors and other devices here
 motor LTM = motor(PORT8, ratio6_1, false);  //
 motor LBM = motor(PORT13, ratio6_1, true);  // reversed
 motor LFM = motor(PORT3, ratio18_1, false); // 5.5W reversed
 motor RTM = motor(PORT7, ratio6_1, true);   //
 motor RBM = motor(PORT9, ratio6_1, false);  // reversed
 motor RFM = motor(PORT6, ratio18_1, true);  // 5.5W revered
-
 inertial Gyro = inertial(PORT5);
-//optical Color = optical(PORT4);
-distance Distance1 = distance(PORT1);
-//distance Distance2 = distance(PORT16);
-
+optical colorSensor = optical(PORT10);
+distance distanceSensor = distance(PORT1);
 motor lift11(PORT17, ratio18_1, false);
 motor lift55(PORT12, ratio18_1, true);
 motor intake(PORT4, ratio36_1, false);
 motor arm(PORT16, ratio18_1, false);
-
 pneumatics p1(Brain.ThreeWirePort.A);
 
-// define your global instances of motors and other devices here
-// We need flags to keep track of the state of the robot
-// 0 = down position , 1 = middle position, 2 = top position
-int arm_position = 0;
-// define your functions here
+int armPosition = 0;
+float pi=3.142;
+float dia=3.25;
+float gearRatio = 4/3;
 
-
-void drive(int left, int right, int wt)
-{
-  RTM.spin(forward, right, percent);
-  RBM.spin(forward, right, percent);
-  RFM.spin(forward, right, percent);
-  LTM.spin(forward, left, percent);
-  LBM.spin(forward, left, percent);
-  LFM.spin(forward, left, percent);
+void drive(int left, int right, int wt){
+  LTM.spin(forward, left, pct);
+  LBM.spin(forward, left, pct);
+  LFM.spin(forward, left, pct);
+  RTM.spin(forward, right, pct);
+  RBM.spin(forward, right, pct);
+  RFM.spin(forward, right, pct);
   wait(wt, msec);
 }
 
-void driveBrake()
-{
-  RTM.stop();
-  RBM.stop();
-  RFM.stop();
-  LTM.stop();
-  LBM.stop();
-  LFM.stop();
+void driveBrake(){
+  LTM.stop(brake);
+  LBM.stop(brake);
+  LFM.stop(brake);
+  RTM.stop(brake);
+  RBM.stop(brake);
+  RFM.stop(brake);
 }
 
-void gyroPrint()
+void inchDrive(float target)
 {
-  float heading = Gyro.rotation(deg);
-  Brain.Screen.printAt(1, 60, "heading  =  %.2f. degrees", heading);
+  float x = 0;
+  LFM.setPosition(0, rev);
+  x = LFM.position(rev) * pi * dia * gearRatio;
+
+  if (target >= 0)
+  { // if your target is greater than 0 we will drive forward
+    while (x <= target)
+    {
+      drive(35, 35, 10);
+      // use gyro here
+      x = LFM.position(rev) * dia * pi * gearRatio;
+      Brain.Screen.printAt(10, 20, "inches = %0.2f", x);
+    }
+  }
+  else if (target < 0)
+  {
+    while (x >= target)
+    { // target less than 0 the robot will drive backward
+      drive(-35, -35, 10);
+      x = LFM.position(rev) * dia * pi * gearRatio;
+      Brain.Screen.printAt(10, 20, "inches = %0.2f", x);
+    }
+  }
+  drive(0, 0, 0);
 }
 
 void gyroTurnRight(float target)
@@ -105,15 +119,15 @@ void liftStop()
   lift55.stop();
 }
 
-void intakeStart()
+void intakeSpin ()
 {
   lift(100);
-  intake.spin(reverse, 100, percent);
+  intake.spin(forward, 100, percent);
 }
 
 void intakeStop()
 {
-  lift(0);
+  liftStop();
   intake.stop();
 }
 
@@ -131,48 +145,29 @@ void clampClose()
   p1.set(false);
 }
 
-float pi = 3.142;
-float dia = 3.25;
-float gearRatio = 4 / 3;
-
-void increaseArm_Position()
-{
-  /*if (arm_position = 0)
-  {
-    armSet(20);
+void armMiddlePosition(){
+  int disc = 0;
+  arm.spinToPosition(30, degrees, 50, velocityUnits::pct);
+  while(1){
+    double distance = distanceSensor.objectDistance(mm);
+    if(distance < 100){
+      liftSet(160);
+      break;
+    }
+    vex::this_thread::sleep_for(10);
   }
-  if (arm_position = 1)
-  {
-    intakeStop();
-    armSet(40);
-    wait(200, msec);
-
-    lift(100);
-    wait(200, msec);
-    armSet(-40);
-    arm_position--;
-    // going to top position should dump rings automatically
-  }*/
-  if (arm_position >= 1)
-  {
-    arm_position++;
+  while(1){
+    double distance = distanceSensor.objectDistance(mm);
+    if(distance < 50){
+      liftSet(320);
+      disc++;
+      if(disc == 2){
+        break;
+      }
+    }
+    vex::this_thread::sleep_for(10);
   }
-  else if (arm_position = 2)
-  {
-    arm_position = 0;
-  }
-}
-void decreaseArm_Position()
-{
-  /*if (arm_position = 1)
-  {
-    armSet(-20);
-  }
-  if (arm_position = 2)
-  {
-    armSet(-40);
-  }*/
-  arm_position--;
+  
 }
 
 void armSet(float target)
@@ -206,16 +201,15 @@ void liftSet(float target)
 {
   float x = 0;
   lift11.setPosition(0, deg);
-  x = lift11.position(deg) * pi * dia * gearRatio;
+  x = lift11.position(deg);
 
   if (target >= 0)
   { // if your target is greater than 0 we will drive forward
     while (x <= target)
     {
       lift(50);
-      // use gyro here
-      x = lift11.position(deg) * dia * pi * gearRatio;
-      Brain.Screen.printAt(10, 20, "inches = %0.2f", x);
+      x = lift11.position(deg);
+      Brain.Screen.printAt(10, 20, "degrees = %0.2f", x);
     }
   }
   else if (target < 0)
@@ -223,85 +217,12 @@ void liftSet(float target)
     while (x >= target)
     { // target less than 0 the robot will drive backward
       lift(-50);
-      x = lift11.position(deg) * dia * pi * gearRatio;
-      Brain.Screen.printAt(10, 20, "inches = %0.2f", x);
+      x = lift11.position(deg);
+      Brain.Screen.printAt(10, 20, "degrees = %0.2f", x);
     }
   }
 
   lift(0);
-}
-
-// bool x;
-/*void stakeMode()
-{
-  bool x = true;
-  while (x = true)
-  {
-
-    float discs = 0;
-    lift11.setPosition(0, rev);
-    lift(50);
-    if (discs = 0 && distance <= 15 && distance >= 50)
-    {
-      // intakeStop();
-      lift(0);
-      liftSet(-80);
-      armSet(15);
-      intakeStart();
-    }
-
-    // when distance<=110 && distance>=90 rotate 160degrees,discs++
-
-    if (discs <= 2 && distance <= 15 && distance >= 50)
-    {
-      liftSet(-160);
-      discs++;
-    }
-    else if (discs = 2)
-    {
-      armSet(30);
-      intakeStop();
-      discs = 3;
-    }
-  }
-}
-
-void loadStake()
-{
-
-  lift(-100);
-  wait(4000, msec);
-  lift(0);
-  inchDrive(20);
-  armSet(-45);
-}*/
-
-void inchDrive(float target)
-{
-  float x = 0;
-  LFM.setPosition(0, rev);
-  x = LFM.position(rev) * pi * dia * gearRatio;
-
-  if (target >= 0)
-  { // if your target is greater than 0 we will drive forward
-    while (x <= target)
-    {
-      drive(35, 35, 10);
-      // use gyro here
-      x = LFM.position(rev) * dia * pi * gearRatio;
-      Brain.Screen.printAt(10, 20, "inches = %0.2f", x);
-    }
-  }
-  else if (target < 0)
-  {
-    while (x >= target)
-    { // target less than 0 the robot will drive backward
-      drive(-35, -35, 10);
-      x = LFM.position(rev) * dia * pi * gearRatio;
-      Brain.Screen.printAt(10, 20, "inches = %0.2f", x);
-    }
-  }
-  drive(0, 0, 0);
 }
 
 void readIMU()
@@ -337,6 +258,25 @@ void readIMU()
   wait(20, msec);
 }
 
+void increaseArm_Position()
+{
+  if(armPosition == 0){
+    armMiddlePosition();
+    armPosition++;
+  }
+  else if(armPosition == 1){
+    //wall stake
+    armPosition=0;
+  }
+}
+
+void bottomPosition()
+{
+  armSet(0);
+  liftSet(0);
+  armPosition = 0;
+}
+
 /*---------------------------------------------------------------------------*/
 /*                          Pre-Autonomous Functions                         */
 /*                                                                           */
@@ -347,12 +287,10 @@ void readIMU()
 /*  not every time that the robot is disabled.                               */
 /*---------------------------------------------------------------------------*/
 
-void pre_auton(void)
-{
+void pre_auton(void) {
 
   // All activities that occur before the competition starts
   // Example: clearing encoders, setting servo positions, ...
-
   while (Gyro.isCalibrating())
   { // Wait for Gyro Calibration , Sleep but Allow other tasks to run
     this_thread::sleep_for(20);
@@ -374,53 +312,10 @@ void pre_auton(void)
 /*  You must modify the code to add your own robot specific commands here.   */
 /*---------------------------------------------------------------------------*/
 
-void autonomous(void)
-{
+void autonomous(void) {
   // ..........................................................................
   // Insert autonomous user code here.
   // ..........................................................................
-  /*clampOpen();
-  inchDrive(-16);
-  clampClose();
-  gyroTurnRight(41);
-  inchDrive(15);
-  intakeStart(); // first disk
-  // second disk
-  inchDrive(29);
-  driveBrake();
-  wait(2000, msec);
-  inchDrive(-2);
-  driveBrake();
-  gyroTurnLeft(15);
-  inchDrive(30);
-  driveBrake();
-  // third disk
-  wait(1000, msec);
-  gyroTurnLeft(15);
-  inchDrive(12);
-  driveBrake();
-  wait(500, msec);
-  inchDrive(12);
-  driveBrake();
-  wait(1000, msec);
-  inchDrive(8);
-  driveBrake();
-  wait(500, msec);
-  reverse_right_motor(-35);
-  driveBrake();
-  inchDrive(15);
-  driveBrake();
-  wait(4000, msec);
-  gyroTurnRight(20);
-  inchDrive(-12);
-  wait(1000, msec);
-  clampOpen();
-  intakeStop();
-  inchDrive(12);
-  gyroTurnRight(8);
-  inchDrive(146);
-  gyroTurnRight(10);
-  inchDrive(100);*/
 }
 
 /*---------------------------------------------------------------------------*/
@@ -433,59 +328,21 @@ void autonomous(void)
 /*  You must modify the code to add your own robot specific commands here.   */
 /*---------------------------------------------------------------------------*/
 
-void usercontrol(void)
-{
+void usercontrol(void) {
   // User control code here, inside the loop
-  while (1)
-  {
-    // This is the main execution loop for the user control program.
-    // Each time through the loop your program should update motor + servo
-    // values based on feedback from the joysticks.
-
-    // ........................................................................
-    // Insert user code here. This is where you use the joystick values to
-    // update your motors, etc.
-    // ........................................................................
+  while (1) {
     readIMU(); // print direction we are facing
     int left = Controller1.Axis3.position();
     int right = Controller1.Axis2.position();
     drive(left, right, 10);
-    Controller1.ButtonUp.pressed(increaseArm_Position);
-    Controller1.ButtonDown.pressed(decreaseArm_Position);
-    Controller1.ButtonR1.pressed(intakeStart);
+    Controller1.ButtonR1.pressed(intakeSpin);
     Controller1.ButtonR2.pressed(intakeStop);
     Controller1.ButtonL1.pressed(clampClose);
     Controller1.ButtonL2.pressed(clampOpen);
     Controller1.ButtonA.pressed(intakeReverse);
+    Controller1.ButtonUp.pressed(increaseArm_Position);
+    Controller1.ButtonDown.pressed(bottomPosition);
 
-    float distance = Distance1.objectDistance(mm);
-
-    if (arm_position = 1)
-    {
-      //lift(50);
-
-      if (distance >= 90 && distance <= 110)
-      {
-        // intakeStop();
-        lift(0);
-        liftSet(-160);
-        armSet(15);
-        intakeStart();
-      }
-
-      // when distance<=110 && distance>=90 rotate 160degrees,discs++
-
-      if (distance <= 15 && distance >= 50)
-      {
-        liftSet(-320);
-      }
-    }
-    else if (arm_position = 2)
-    {
-      armSet(30);
-      intakeStop();
-      arm_position = 0;
-    }
     wait(20, msec); // Sleep the task for a short amount of time to
                     // prevent wasted resources.
   }
@@ -494,8 +351,7 @@ void usercontrol(void)
 //
 // Main will set up the competition functions and callbacks.
 //
-int main()
-{
+int main() {
   // Set up callbacks for autonomous and driver control periods.
   Competition.autonomous(autonomous);
   Competition.drivercontrol(usercontrol);
@@ -504,8 +360,7 @@ int main()
   pre_auton();
 
   // Prevent main from exiting with an infinite loop.
-  while (true)
-  {
+  while (true) {
     wait(100, msec);
   }
 }
