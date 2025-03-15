@@ -28,15 +28,18 @@ distance distanceSensor = distance(PORT1);
 motor lift11(PORT17, ratio18_1, false);
 motor lift55(PORT12, ratio18_1, true);
 motor intake(PORT4, ratio36_1, false);
-motor arm(PORT16, ratio18_1, false);
+motor arm(PORT16, ratio18_1, true);
 pneumatics p1(Brain.ThreeWirePort.A);
 
 int armPosition = 0;
-float pi=3.142;
-float dia=3.25;
-float gearRatio = 4/3;
+float pi = 3.142;
+float dia = 3.25;
+float gearRatio = 4 / 3;
+vex::thread thread1;
+bool killthread1 = false;
 
-void drive(int left, int right, int wt){
+void drive(int left, int right, int wt)
+{
   LTM.spin(forward, left, pct);
   LBM.spin(forward, left, pct);
   LFM.spin(forward, left, pct);
@@ -46,7 +49,8 @@ void drive(int left, int right, int wt){
   wait(wt, msec);
 }
 
-void driveBrake(){
+void driveBrake()
+{
   LTM.stop(brake);
   LBM.stop(brake);
   LFM.stop(brake);
@@ -119,10 +123,10 @@ void liftStop()
   lift55.stop();
 }
 
-void intakeSpin ()
+void intakeForward()
 {
   lift(100);
-  intake.spin(forward, 100, percent);
+  intake.spin(reverse, 100, percent);
 }
 
 void intakeStop()
@@ -131,73 +135,22 @@ void intakeStop()
   intake.stop();
 }
 
-void intakeReverse(){
+void intakeReverse()
+{
   lift(-100);
 }
 
 void clampOpen()
 {
-  p1.set(true);
+  p1.set(false);
 }
 
 void clampClose()
 {
-  p1.set(false);
+  p1.set(true);
 }
 
-void armMiddlePosition(){
-  int disc = 0;
-  arm.spinToPosition(30, degrees, 50, velocityUnits::pct);
-  while(1){
-    double distance = distanceSensor.objectDistance(mm);
-    if(distance < 100){
-      liftSet(160);
-      break;
-    }
-    vex::this_thread::sleep_for(10);
-  }
-  while(1){
-    double distance = distanceSensor.objectDistance(mm);
-    if(distance < 50){
-      liftSet(320);
-      disc++;
-      if(disc == 2){
-        break;
-      }
-    }
-    vex::this_thread::sleep_for(10);
-  }
-  
-}
-
-void armSet(float target)
-{
-  float x = 0;
-  arm.setPosition(0, deg);
-  x = arm.position(deg);
-
-  if (target >= 0)
-  {
-    while (x <= target)
-    {
-      arm.spin(forward, 100, percent);
-
-      x = arm.position(deg); /*Brain.Screen.printAt(10, 20, "degrees = %0.2f", x);*/
-    }
-  }
-  else if (target <= 0)
-  {
-    while (x >= target)
-    {
-      arm.spin(reverse, 100, percent);
-
-      x = arm.position(deg); /*Brain.Screen.printAt(10, 20, "degrees = %0.2f", x);*/
-    }
-  }
-  arm.stop();
-}
-
-void liftSet(float target)
+void liftSet(float target, int speed)
 {
   float x = 0;
   lift11.setPosition(0, deg);
@@ -207,7 +160,7 @@ void liftSet(float target)
   { // if your target is greater than 0 we will drive forward
     while (x <= target)
     {
-      lift(50);
+      lift(speed);
       x = lift11.position(deg);
       Brain.Screen.printAt(10, 20, "degrees = %0.2f", x);
     }
@@ -216,13 +169,86 @@ void liftSet(float target)
   {
     while (x >= target)
     { // target less than 0 the robot will drive backward
-      lift(-50);
+      lift(-speed);
       x = lift11.position(deg);
       Brain.Screen.printAt(10, 20, "degrees = %0.2f", x);
     }
   }
 
   lift(0);
+}
+
+void armMiddlePosition()
+{
+  int disc = 0;
+  arm.setPosition(0, deg);
+  arm.spinToPosition(225, degrees, 50, velocityUnits::pct);
+  arm.setBrake(brakeType::hold);
+  armPosition = 1;
+  intake.spin(reverse, 100, percent);
+  /*while (!killthread1)
+  {
+    double distance = distanceSensor.objectDistance(mm);
+    lift(-25);
+    if (distance < 100 && distance > 80)
+    {
+      lift(0);
+      liftSet(-160);
+      intake.spin(reverse, 100, percent);
+      break;
+    }
+    vex::this_thread::sleep_for(10);
+  }*/
+  while (!killthread1)
+  {
+    double distance = distanceSensor.objectDistance(mm);
+    if (distance < 50)
+    {
+      liftSet(-320,50);
+      intake.stop();
+      break;
+    }
+    vex::this_thread::sleep_for(10);
+  }
+  killthread1 = false;
+}
+
+void armSet(float target, int timeout_ms)
+{
+  float x = 0;
+  arm.setPosition(0, deg);
+  x = arm.position(deg);
+
+  vex::timer t; // Initialize a timer
+  t.clear();    // Reset the timer
+
+  if (target >= 0)
+  {
+    while (x <= target)
+    {
+      if (t.time() > timeout_ms)
+      {
+        Brain.Screen.printAt(10, 120, "Timeout reached while moving arm forward.");
+        break;
+      }
+      arm.spin(forward, 100, percent);
+      x = arm.position(deg);
+    }
+  }
+  else if (target <= 0)
+  {
+    while (x >= target)
+    {
+      if (t.time() > timeout_ms)
+      {
+        Brain.Screen.printAt(10, 120, "Timeout reached while moving arm reverse.");
+        break;
+      }
+      arm.spin(reverse, 100, percent);
+      x = arm.position(deg);
+    }
+  }
+  arm.stop();
 }
 
 void readIMU()
@@ -258,23 +284,64 @@ void readIMU()
   wait(20, msec);
 }
 
-void increaseArm_Position()
+void wallStake()
 {
-  if(armPosition == 0){
-    armMiddlePosition();
-    armPosition++;
+  armSet(600, 1000);
+  wait(10, msec);
+  liftSet(-600,100);
+}
+
+void increaseArmPosition()
+{
+  Brain.Screen.clearScreen();
+  if (killthread1)
+  {
+    Brain.Screen.printAt(10, 10, "Thread is being killed, can't increase position");
+    return;
   }
-  else if(armPosition == 1){
-    //wall stake
-    armPosition=0;
+  if (armPosition == 0)
+  {
+    Brain.Screen.printAt(10, 10, "Moving to middle position...");
+    killthread1 = false;
+    thread1 = vex::thread(armMiddlePosition);
+    wait(10, msec);
+  }
+  else if (armPosition == 1)
+  {
+    Brain.Screen.printAt(10, 10, "Moving to top position...");
+    wallStake();
+    armPosition = 2;
+    wait(10, msec);
+  }
+  else
+  {
+    Brain.Screen.printAt(10, 10, "Already at top position");
+    Brain.Screen.printAt(10, 100, "armPosition = %d", armPosition);
   }
 }
 
 void bottomPosition()
 {
-  armSet(0);
-  liftSet(0);
+  if (armPosition == 1)
+  {
+    killthread1 = true;
+    armSet(-250, 1000);
+    arm.setBrake(brakeType::hold);
+    lift(0);
+  }
+  if (armPosition == 2)
+  {
+    armSet(-900, 1000);
+    arm.setBrake(brakeType::hold);
+    lift(0);
+  }
+  else
+  {
+    armSet(-50,250);
+    arm.setBrake(brakeType::hold);
+  }
   armPosition = 0;
+  
 }
 
 /*---------------------------------------------------------------------------*/
@@ -287,7 +354,8 @@ void bottomPosition()
 /*  not every time that the robot is disabled.                               */
 /*---------------------------------------------------------------------------*/
 
-void pre_auton(void) {
+void pre_auton(void)
+{
 
   // All activities that occur before the competition starts
   // Example: clearing encoders, setting servo positions, ...
@@ -295,11 +363,9 @@ void pre_auton(void) {
   { // Wait for Gyro Calibration , Sleep but Allow other tasks to run
     this_thread::sleep_for(20);
   }
-  while (true)
-  {
-    readIMU();
-    this_thread::sleep_for(50);
-  }
+  //armSet(-150,500);
+  arm.setBrake(brakeType::hold);
+
 }
 
 /*---------------------------------------------------------------------------*/
@@ -312,7 +378,103 @@ void pre_auton(void) {
 /*  You must modify the code to add your own robot specific commands here.   */
 /*---------------------------------------------------------------------------*/
 
-void autonomous(void) {
+void autonomous(void)
+{
+
+  armSet(-50,50);
+
+  //beginning of match auton
+/*clampOpen();
+inchDrive(-20);
+clampClose();
+liftSet(360,100);
+//if we go further
+gyroTurnLeft(120);//turn right for red
+clampOpen();
+inchDrive(20);
+clampClose();
+inchDrive(-20);
+gyroTurnLeft(135);//calibrate so intake faces ladder
+inchDrive(15);*/
+//end of match auton
+
+//beginning of skills auton: changed but would work for 2 disc score on hihstks
+/*clampOpen();
+inchDrive(-20);//change distance
+clampClose();
+lift(100);
+//full stake after preload
+gyroTurnRight(120);//turn right for red
+inchDrive(20);//change distance, inbetween ladder corner and wall stake
+gyroTurnRight(60);
+inchDrive(48);
+inchDrive(-10);
+inchDrive(12);
+gyroTurnLeft(180);
+inchDrive(96)
+driveBrake();
+wait(100,msec);
+inchDrive(24);
+inchDrive(-10);//change distance
+gyroTurnLeft(90);//calibrate to face directly at wall to park
+inchDrive(-24);
+//wall stake
+driveBrake();//needed?
+wait(100,msec);
+inchDrive(10);//may need wait aftr drive to use gyro turn correctly
+gyroTurnLeft(100);//change angle?
+inchDrive(24);
+wait(100,msec);
+inchDrive()*/
+
+clampOpen();
+  inchDrive(-16);
+  clampClose();
+  gyroTurnRight(225);
+  inchDrive(15);
+  intakeStart(); // first disk
+  // second disk
+  inchDrive(29);
+  driveBrake();
+  wait(1000, msec);
+  inchDrive(-2);
+  driveBrake();
+  gyroTurnLeft(90);
+  inchDrive(30);
+  driveBrake();
+  // third disk
+  wait(500, msec);
+  gyroTurnLeft(90);
+  inchDrive(12);
+  driveBrake();
+  wait(200, msec);
+  inchDrive(12);
+  driveBrake();
+  wait(500, msec);
+  inchDrive(8);
+  driveBrake();
+  wait(200, msec);
+  inchDrive(-2);
+  wait(200,msec)
+  gyroTurnRight(135);
+  driveBrake();
+  inchDrive(15);
+  driveBrake();
+  wait(1000, msec);
+  gyroTurnRight(45);
+  inchDrive(-12);
+  wait(500, msec);
+  clampOpen();
+  intakeStop();
+  increase_arm_position();
+
+  inchDrive(12);
+  gyroTurnRight(8);
+  inchDrive(146);
+  gyroTurnRight(10);
+  inchDrive(100);
+
+
   // ..........................................................................
   // Insert autonomous user code here.
   // ..........................................................................
@@ -328,20 +490,37 @@ void autonomous(void) {
 /*  You must modify the code to add your own robot specific commands here.   */
 /*---------------------------------------------------------------------------*/
 
-void usercontrol(void) {
+void usercontrol(void)
+{
+
+
+  clampOpen();
+  //armSet(-150,100);
+  arm.setBrake(brakeType::hold);
   // User control code here, inside the loop
-  while (1) {
-    readIMU(); // print direction we are facing
+  armPosition = 0;
+  while (1)
+  {
+    // readIMU(); // print direction we are facing
     int left = Controller1.Axis3.position();
     int right = Controller1.Axis2.position();
     drive(left, right, 10);
-    Controller1.ButtonR1.pressed(intakeSpin);
-    Controller1.ButtonR2.pressed(intakeStop);
-    Controller1.ButtonL1.pressed(clampClose);
-    Controller1.ButtonL2.pressed(clampOpen);
-    Controller1.ButtonA.pressed(intakeReverse);
-    Controller1.ButtonUp.pressed(increaseArm_Position);
+    Controller1.ButtonR1.pressed(intakeForward);
+    Controller1.ButtonR2.pressed(intakeReverse);
+    Controller1.ButtonL1.pressed(clampOpen);
+    Controller1.ButtonL2.pressed(clampClose);
+    Controller1.ButtonX.pressed(intakeStop);
+    Controller1.ButtonUp.pressed(increaseArmPosition);
     Controller1.ButtonDown.pressed(bottomPosition);
+    Brain.Screen.printAt(10, 100, "armPosition = %d", armPosition);
+    //int discColor = colorSensor.color();
+
+    /*if (armPosition == 0  && discColor>=100 && discColor<=150)
+    {
+      lift(0);
+      wait(20,msec);
+      lift(100);
+    }*/
 
     wait(20, msec); // Sleep the task for a short amount of time to
                     // prevent wasted resources.
@@ -351,7 +530,8 @@ void usercontrol(void) {
 //
 // Main will set up the competition functions and callbacks.
 //
-int main() {
+int main()
+{
   // Set up callbacks for autonomous and driver control periods.
   Competition.autonomous(autonomous);
   Competition.drivercontrol(usercontrol);
@@ -360,7 +540,8 @@ int main() {
   pre_auton();
 
   // Prevent main from exiting with an infinite loop.
-  while (true) {
+  while (true)
+  {
     wait(100, msec);
   }
 }
